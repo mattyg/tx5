@@ -16,6 +16,7 @@ enum Cmd {
     RecvMessage(Vec<u8>),
     DataChanOpen,
     BufferedAmountLow,
+    Error(std::io::Error),
 }
 
 pub struct Webrtc {
@@ -125,6 +126,29 @@ async fn task(
             while let Some(evt) = peer_evt.recv().await {
                 match evt {
                     Evt::Error(_) => break,
+                    Evt::State(
+                        tx5_go_pion::PeerConnectionState::Disconnected,
+                    ) => {
+                        cmd_send2.send_or_close(Cmd::Error(
+                            std::io::Error::other(
+                                "PeerConnectionState changed to Disconnected",
+                            ),
+                        ))?;
+                    }
+                    Evt::State(tx5_go_pion::PeerConnectionState::Closed) => {
+                        cmd_send2.send_or_close(Cmd::Error(
+                            std::io::Error::other(
+                                "PeerConnectionState changed to Closed",
+                            ),
+                        ))?;
+                    }
+                    Evt::State(tx5_go_pion::PeerConnectionState::Failed) => {
+                        cmd_send2.send_or_close(Cmd::Error(
+                            std::io::Error::other(
+                                "PeerConnectionState changed to Failed",
+                            ),
+                        ))?;
+                    }
                     Evt::State(_) => (),
                     Evt::ICECandidate(mut ice) => {
                         cmd_send2
@@ -225,6 +249,7 @@ async fn task(
             Cmd::BufferedAmountLow => {
                 pend_buffer.clear();
             }
+            Cmd::Error(err) => return Err(err),
         }
     }
 
